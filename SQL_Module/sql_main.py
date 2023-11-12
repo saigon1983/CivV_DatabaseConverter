@@ -17,6 +17,7 @@ def get_table_names(database='Original/Database/Civ5DebugDatabase.db'):
     connection = sqlite3.connect(database)
     cursor = connection.cursor()
     cursor.execute('SELECT name from sqlite_master where type= "table"')
+    connection.close()
     return [item[0] for item in cursor.fetchall()]
 
 
