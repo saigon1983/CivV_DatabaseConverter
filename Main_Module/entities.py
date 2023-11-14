@@ -2,68 +2,18 @@ from SQL_Module.sql_main import *
 from Main_Module.constants import *
 import re
 
-class CivValue:
+class Civ5Value:
 
-	def __init__(self, table, owner, name, value):
-		self.table  	= table
-		self.owner		= owner
+	def __init__(self, name, value, attributes):
 		self.name  		= name
 		self.value 		= value
-		#self.__setup()
-
-	def __setup(self):
-		if self.name != 'ID':
-			list_of_columns = DB_ORIGINAL.execute("SELECT type, dflt_value, pk FROM pragma_table_info('{}') WHERE name = '{}'".format(self.table, self.name)).fetchone()
-		else:
-			list_of_columns = ('INTEGER', None, 1)
-		self.valueType 	= list_of_columns[0]
-		self.default 	= list_of_columns[1]
-		self.primary 	= list_of_columns[2]
-
-		if self.name != 'ID':
-			if self.valueType == 'INTEGER':
-				if self.default.startswith("'-"): self.default = self.default.replace("'", '')
-				self.default = int(self.default)
-			elif self.valueType == 'TEXT':
-				if self.default:
-					pass
-				else:
-					print(self.name, self.value, self.default)
-			elif self.valueType == 'boolean':
-				self.valueType = 'BOOLEAN'
-
-	def __str__(self):
-		return 'Value from table <{}> of owner <{}>:\t{}: {}'.format(self.table, self.owner, self.name, self.value)
-
-class CivEntity:
-	# Общий родительский класс для всех типов сущностей Civilization 5
-	MAIN_TABLE    = ''
-	OTHER_TABLES  = []
-	def __init__(self, entityData):
-		if not self.__class__.MAIN_TABLE:
-			self.__class__.MAIN_TABLE = entityData['EntityType']
-		if not self.__class__.OTHER_TABLES:
-			self.__class__.OTHER_TABLES = entityData['TableNames'].copy()
-			if self.__class__.MAIN_TABLE in self.__class__.OTHER_TABLES:
-				self.__class__.OTHER_TABLES.remove(self.__class__.MAIN_TABLE)
-		self.Type = entityData['Type']
-
-		for key, value in entityData.items():
-			if key not in ('EntityType', 'TableNames', 'Type'):
-				newValue = CivValue(self.MAIN_TABLE, self.Type, key, value)
-				self.__setattr__(key, newValue)
-				#print(self.__getattribute__(key))
-
-		self.__check_origin()
-
-	def __check_origin(self):
-		tabletypes = [item[0] for item in DB_ORIGINAL.execute("select Type from {}".format(self.MAIN_TABLE)).fetchall()]
-		self.original = self.Type in tabletypes
+		if attributes == None: print(self.name, self.value, attributes)
 
 class Civ5Entity:
 	# Общий родительский класс для всех типов сущностей Civilization 5
 	DB 	= sqlite3.connect('Original/Database/Civ5DebugDatabase.db')
 	MainTableName 		= ''	# Название основной таблицы (тип сущности)
+	OriginalTypes		= []	# Список оригинальных сущностей, доступных в немодифицированной игре
 	DatabaseTableNames 	= [item[0] for item in DB.execute('SELECT name from sqlite_master where type= "table"').fetchall()]
 	SecondaryTablePrefixes = {'BuildingClasses': 'BuildingClass',
 							  'Buildings': 			'Building',
@@ -188,16 +138,21 @@ class Civ5Entity:
 				cls.ValidTables[tablename][columnName]['Unique'] 		= unique
 				if line:
 					raise ValueError
+	@classmethod
+	def select_original_types(cls):
+		cls.OriginalTypes = [x[0] for x in DB_ORIGINAL.execute("SELECT Type FROM {}".format(cls.MainTableName)).fetchall()]
 
 	def __init__(self, someData):
 		for key, value in someData.items():
+			curColumn 	= key
+			curValue  	= value
+
 			if key == 'EntityType':
 				if not self.__class__.MainTableName: self.set_main_table_name(value)
+				if not self.__class__.OriginalTypes: self.select_original_types()
 			elif key == 'TableNames':
 				if not self.__class__.ValidTables: self.set_valid_tables(value)
 			else:
-				curColumn 	= key
-				curValue  	= value
 				curAttribs	= self.ValidTables[self.MainTableName][key]
 
 				if curAttribs['DataType'] == 'INTEGER':
@@ -209,14 +164,9 @@ class Civ5Entity:
 					if curValue not in ('false', 'true') and curValue != None:
 						raise TypeError('Table <{}>: column <{}> has value <{}>. Must be in <<false, true>>'.format(self.MainTableName, curColumn, curValue))
 				else: raise TypeError('Table <{}>: Unrecognized data type <{}> in column <{}>'.format(self.MainTableName, curAttribs['DataType'], curColumn))
-
-				if curValue == None:
-					#if curValue != curAttribs['DefaultValue']: print(self.MainTableName, curColumn, curValue, curAttribs['DefaultValue'])
-					curValue = curAttribs['DefaultValue']
-				if curValue == None:
-					pass
-					print(self.MainTableName, curColumn, curValue)
-				print('====================================')
+				if curValue is None: curValue = curAttribs['DefaultValue']
+				self.__setattr__(curColumn, Civ5Value(curColumn, curValue, curAttribs))
+		#self.Original = True if self.Type in self.OriginalTypes else False
 
 class BuildingClass(Civ5Entity):
 	MainTableName	= ''
