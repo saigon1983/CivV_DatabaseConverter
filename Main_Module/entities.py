@@ -3,11 +3,21 @@ from Main_Module.constants import *
 import re
 
 class Civ5Value:
-
 	def __init__(self, name, value, attributes):
 		self.name  		= name
 		self.value 		= value
-		if attributes == None: print(self.name, self.value, attributes)
+		if attributes == None: raise AttributeError('Список атрибутов, переданный для значения {} пуст!'.format(self.name))
+		self.type 		= attributes['DataType']
+		self.default 	= attributes['DefaultValue']
+		self.reference 	= attributes['References']
+		self.autoinc 	= attributes['AutoIncrement']
+		self.notnull 	= attributes['NotNull']
+		self.unique 	= attributes['Unique']
+
+	def __str__(self):
+		return '{}: {} ({}, {})'.format(self.name, self.value, self.type, self.is_default())
+	def is_default(self):
+		return self.value == self.default
 
 class Civ5Entity:
 	# Общий родительский класс для всех типов сущностей Civilization 5
@@ -142,8 +152,8 @@ class Civ5Entity:
 	def select_original_types(cls):
 		cls.OriginalTypes = [x[0] for x in DB_ORIGINAL.execute("SELECT Type FROM {}".format(cls.MainTableName)).fetchall()]
 
-	def __init__(self, someData):
-		for key, value in someData.items():
+	def __init__(self, primaryData):
+		for key, value in primaryData.items():
 			curColumn 	= key
 			curValue  	= value
 
@@ -152,6 +162,8 @@ class Civ5Entity:
 				if not self.__class__.OriginalTypes: self.select_original_types()
 			elif key == 'TableNames':
 				if not self.__class__.ValidTables: self.set_valid_tables(value)
+			elif key == 'SecondaryTables':
+				pass
 			else:
 				curAttribs	= self.ValidTables[self.MainTableName][key]
 
@@ -166,70 +178,89 @@ class Civ5Entity:
 				else: raise TypeError('Table <{}>: Unrecognized data type <{}> in column <{}>'.format(self.MainTableName, curAttribs['DataType'], curColumn))
 				if curValue is None: curValue = curAttribs['DefaultValue']
 				self.__setattr__(curColumn, Civ5Value(curColumn, curValue, curAttribs))
-		#self.Original = True if self.Type in self.OriginalTypes else False
+		self.Original = True if self.Type.value in self.OriginalTypes else False
 
 class BuildingClass(Civ5Entity):
 	MainTableName	= ''
+	OriginalTypes 	= []
 	ValidTables 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Building(Civ5Entity):
 	MainTableName	= ''
+	OriginalTypes 	= []
 	ValidTables 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Civilization(Civ5Entity):
 	MainTableName	= ''
+	OriginalTypes 	= []
 	ValidTables 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Era(Civ5Entity):
 	MainTableName	= ''
+	OriginalTypes 	= []
 	ValidTables 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Feature(Civ5Entity):
 	MainTableName	= ''
+	OriginalTypes 	= []
+	ValidTables 	= {}
+	def __init__(self, someData):
+		super().__init__(someData)
+class FakeFeature(Civ5Entity):
+	MainTableName	= ''
+	OriginalTypes 	= []
 	ValidTables 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Improvement(Civ5Entity):
 	MainTableName	= ''
+	OriginalTypes 	= []
 	ValidTables 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Leader(Civ5Entity):
 	MainTableName	= ''
+	OriginalTypes 	= []
 	ValidTables 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Policy(Civ5Entity):
 	MainTableName	= ''
+	OriginalTypes 	= []
 	ValidTables 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class PolicyBranch(Civ5Entity):
 	MainTableName	= ''
+	OriginalTypes 	= []
 	ValidTables 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Resource(Civ5Entity):
 	MainTableName	= ''
+	OriginalTypes 	= []
 	ValidTables 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Technology(Civ5Entity):
 	MainTableName	= ''
+	OriginalTypes 	= []
 	ValidTables 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class UnitClass(Civ5Entity):
 	MainTableName	= ''
+	OriginalTypes 	= []
 	ValidTables 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Unit(Civ5Entity):
 	MainTableName	= ''
+	OriginalTypes 	= []
 	ValidTables 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
