@@ -21,15 +21,14 @@ class Civ5Value:
 
 class Civ5Entity:
 	# Общий родительский класс для всех типов сущностей Civilization 5
-	DB 	= sqlite3.connect('Original/Database/Civ5DebugDatabase.db')
 	MainTableName 		= ''	# Название основной таблицы (тип сущности)
-	OriginalTypes		= []	# Список оригинальных сущностей, доступных в немодифицированной игре
-	DatabaseTableNames 	= [item[0] for item in DB.execute('SELECT name from sqlite_master where type= "table"').fetchall()]
-	SecondaryTablePrefixes = {'BuildingClasses': 'BuildingClass',
+	OriginalEntities	= []	# Список оригинальных сущностей, доступных в немодифицированной игре
+	SecondaryTablePrefixes = {'BuildingClasses': 	'BuildingClass',
 							  'Buildings': 			'Building',
 							  'Civilizations': 		'Civilization',
 							  'Eras': 				'Era',
 							  'Features': 			'Feature',
+							  'FakeFeatures': 		'Feature',
 							  'Improvements': 		'Improvement',
 							  'Leaders': 			'Leader',
 							  'Policies': 			'Policy',
@@ -38,34 +37,31 @@ class Civ5Entity:
 							  'Technologies': 		'Technology',
 							  'UnitClasses': 		'UnitClass',
 							  'Units': 				'Unit'}
-	ValidTables 		= {}	# Словарь названий допустимых таблиц, в которых может быть отредактирована сущность.
+	TableProperties 	= {}	# Словарь названий допустимых таблиц, в которых может быть отредактирована сущность.
 								# Ключами являются названия таблиц, а значениями - вложенные списки, где ключами являются
 								# заголовки свойств (столбцов), а их значениями - параметры этих заголовков в БД SQL
 
 	@classmethod
-	def set_main_table_name(cls, value):
-		cls.MainTableName = value
+	def getFamilyTableNames(cls, original=True):
+		# Метод класса возвращает список названий таблиц, соответствующий сущности класса, начиная с главной таблицы
+		CURRENT_DB = DB_ORIGINAL if original else DB_MODIFIED
+
+		result 	= [cls.MainTableName]
+		prefix 	= cls.SecondaryTablePrefixes[cls.MainTableName]
+		pattern = "SELECT name FROM sqlite_master WHERE type='table' and name LIKE '{}\\_%' ESCAPE '\\'".format(prefix)
+
+		for tablename in CURRENT_DB.execute(pattern).fetchall(): result.append(tablename[0])
+
+		return result
 	@classmethod
-	def set_valid_tables(cls, value):
-		tablenames = value.copy()
-		for tablename in tablenames:
-			if tablename != cls.MainTableName:
-				prefix = cls.SecondaryTablePrefixes[cls.MainTableName]
-				tablename = '{}_{}'.format(prefix, tablename)
+	def setFamilyTableProperties(cls):
+		family_table_names = cls.getFamilyTableNames()
+		for tablename in family_table_names:
+			cls.TableProperties[tablename] = {}
 
-				if tablename == 'Building_DomainFreeExperiencePerGW': tablename = 'Building_DomainFreeExperiencePerGreatWork'
-				if tablename == 'Feature_FakeFeatures': tablename = 'FakeFeatures'
-				if tablename == 'Policy_BuildinClassProductionModifiers': tablename = 'Policy_BuildingClassProductionModifiers'
-
-			if tablename not in cls.DatabaseTableNames:
-				raise ValueError('Таблицы с именем <{}> нет в оригинальной базе данных!'.format(tablename))
-			cls.ValidTables[tablename] = {}
-
-			sqlfile = SQLDBFILE
-			i1 = sqlfile.find('CREATE TABLE IF NOT EXISTS "{}" ('.format(tablename))
-			i2 = sqlfile[i1:].find(');')
-			sqlfile = sqlfile[i1:i1+i2].splitlines()
-
+			start  	= SQLDBFILE.find('CREATE TABLE IF NOT EXISTS "{}" ('.format(tablename))
+			finish 	= start+SQLDBFILE[start:].find(');')
+			sqlfile = SQLDBFILE[start:finish].splitlines()
 			for line in sqlfile[1:]:
 				columnName 		= None
 				dataType 		= None
@@ -89,8 +85,8 @@ class Civ5Entity:
 					line = line.replace(match, '').strip()
 					columnName = match.replace('"', '')
 				if not columnName: raise ValueError
-				if columnName not in cls.ValidTables[tablename].keys():
-					cls.ValidTables[tablename][columnName] = {'DataType': 		None,
+				if columnName not in cls.TableProperties[tablename].keys():
+					cls.TableProperties[tablename][columnName] = {'DataType': 		None,
 															  'DefaultValue': 	None,
 															  'References': 	None,
 															  'AutoIncrement': 	None,
@@ -98,12 +94,12 @@ class Civ5Entity:
 															  'Unique': 		None}
 				if line.startswith('AUTOINCREMENT'):
 					line = line.replace('AUTOINCREMENT', '').strip()
-					cls.ValidTables[tablename][columnName]['AutoIncrement'] = True
+					cls.TableProperties[tablename][columnName]['AutoIncrement'] = True
 				if line.startswith('REFERENCES'):
 					match = re.match(r'REFERENCES "\S+"\("\S+"\)', line)[0]
 					line = line.replace(match, '').strip()
 					match = match.replace('REFERENCES "', '').replace('")', ')').replace('"("', '(').strip()
-					cls.ValidTables[tablename][columnName]['References'] = match
+					cls.TableProperties[tablename][columnName]['References'] = match
 				if line.startswith('text'):
 					dataType = 'TEXT'
 					line = line.replace('text', '').strip()
@@ -113,8 +109,8 @@ class Civ5Entity:
 				if line.startswith('boolean') or line.startswith('bool'):
 					dataType = 'BOOLEAN'
 					line = line.replace('boolean', '').replace('bool', '').strip()
-				if not cls.ValidTables[tablename][columnName]['DataType']:
-					cls.ValidTables[tablename][columnName]['DataType'] = dataType
+				if not cls.TableProperties[tablename][columnName]['DataType']:
+					cls.TableProperties[tablename][columnName]['DataType'] = dataType
 				if line.startswith('DEFAULT'):
 					line = line.replace('DEFAULT', '').strip()
 					if line == '0' and dataType == 'BOOLEAN':
@@ -136,23 +132,37 @@ class Civ5Entity:
 					if line.startswith("'"):
 						defaultValue = line.strip("'")
 						line = line.replace(defaultValue, '').replace("'", '').strip()
-				if not cls.ValidTables[tablename][columnName]['DefaultValue']:
-					cls.ValidTables[tablename][columnName]['DefaultValue'] = defaultValue
+				if not cls.TableProperties[tablename][columnName]['DefaultValue']:
+					cls.TableProperties[tablename][columnName]['DefaultValue'] = defaultValue
 				if line.startswith('NOT NULL'):
 					line = line.replace("NOT NULL", '').strip()
 					notNull = True
 				if line.startswith('UNIQUE'):
 					line = line.replace("UNIQUE", '').strip()
 					unique = True
-				cls.ValidTables[tablename][columnName]['NotNull'] 		= notNull
-				cls.ValidTables[tablename][columnName]['Unique'] 		= unique
+				cls.TableProperties[tablename][columnName]['NotNull'] 		= notNull
+				cls.TableProperties[tablename][columnName]['Unique'] 		= unique
 				if line:
 					raise ValueError
 	@classmethod
-	def select_original_types(cls):
-		cls.OriginalTypes = [x[0] for x in DB_ORIGINAL.execute("SELECT Type FROM {}".format(cls.MainTableName)).fetchall()]
+	def setOriginalTypesList(cls):
+		cls.OriginalEntities = [x[0] for x in DB_ORIGINAL.execute("SELECT Type FROM {}".format(cls.MainTableName)).fetchall()]
 
-	def __init__(self, primaryData):
+	def __init__(self, someData = ''):
+		self._set_template()
+	def _set_template(self):
+		self.DATA = {}
+		for tablename, defaults in self.TableProperties.items():
+			self.DATA[tablename] = []
+			newValues = []
+			for key, val in defaults.items():
+				name 	 = key
+				value  	 = val['DefaultValue']
+				newValue = Civ5Value(name, value, val)
+				newValues.append(newValue)
+			self.DATA[tablename].append(newValues)
+
+	def __init2__(self, primaryData):
 		for key, value in primaryData.items():
 			curColumn 	= key
 			curValue  	= value
@@ -181,86 +191,93 @@ class Civ5Entity:
 		self.Original = True if self.Type.value in self.OriginalTypes else False
 
 class BuildingClass(Civ5Entity):
-	MainTableName	= ''
-	OriginalTypes 	= []
-	ValidTables 	= {}
+	MainTableName		= 'BuildingClasses'
+	OriginalEntities	= []
+	TableProperties 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Building(Civ5Entity):
-	MainTableName	= ''
-	OriginalTypes 	= []
-	ValidTables 	= {}
+	MainTableName		= 'Buildings'
+	OriginalEntities	= []
+	TableProperties 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Civilization(Civ5Entity):
-	MainTableName	= ''
-	OriginalTypes 	= []
-	ValidTables 	= {}
+	MainTableName		= 'Civilizations'
+	OriginalEntities	= []
+	TableProperties 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Era(Civ5Entity):
-	MainTableName	= ''
-	OriginalTypes 	= []
-	ValidTables 	= {}
+	MainTableName		= 'Eras'
+	OriginalEntities	= []
+	TableProperties 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Feature(Civ5Entity):
-	MainTableName	= ''
-	OriginalTypes 	= []
-	ValidTables 	= {}
+	MainTableName		= 'Features'
+	OriginalEntities	= []
+	TableProperties 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class FakeFeature(Civ5Entity):
-	MainTableName	= ''
-	OriginalTypes 	= []
-	ValidTables 	= {}
+	MainTableName		= 'FakeFeatures'
+	OriginalEntities	= []
+	TableProperties 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Improvement(Civ5Entity):
-	MainTableName	= ''
-	OriginalTypes 	= []
-	ValidTables 	= {}
+	MainTableName		= 'Improvements'
+	OriginalEntities	= []
+	TableProperties 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Leader(Civ5Entity):
-	MainTableName	= ''
-	OriginalTypes 	= []
-	ValidTables 	= {}
+	MainTableName		= 'Leaders'
+	OriginalEntities	= []
+	TableProperties 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Policy(Civ5Entity):
-	MainTableName	= ''
-	OriginalTypes 	= []
-	ValidTables 	= {}
+	MainTableName		= 'Policies'
+	OriginalEntities	= []
+	TableProperties 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class PolicyBranch(Civ5Entity):
-	MainTableName	= ''
-	OriginalTypes 	= []
-	ValidTables 	= {}
+	MainTableName		= 'PolicyBranchTypes'
+	OriginalEntities	= []
+	TableProperties 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Resource(Civ5Entity):
-	MainTableName	= ''
-	OriginalTypes 	= []
-	ValidTables 	= {}
+	MainTableName		= 'Resources'
+	OriginalEntities	= []
+	TableProperties 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Technology(Civ5Entity):
-	MainTableName	= ''
-	OriginalTypes 	= []
-	ValidTables 	= {}
+	MainTableName		= 'Technologies'
+	OriginalEntities	= []
+	TableProperties 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class UnitClass(Civ5Entity):
-	MainTableName	= ''
-	OriginalTypes 	= []
-	ValidTables 	= {}
+	MainTableName		= 'UnitClasses'
+	OriginalEntities	= []
+	TableProperties 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
 class Unit(Civ5Entity):
-	MainTableName	= ''
-	OriginalTypes 	= []
-	ValidTables 	= {}
+	MainTableName		= 'Units'
+	OriginalEntities	= []
+	TableProperties 	= {}
 	def __init__(self, someData):
 		super().__init__(someData)
+
+classList = ('BuildingClass', 'Building', 	'Civilization', 'Era', 		'Feature', 		'FakeFeature', 	'Improvement',
+		  	 'Leader', 		  'Policy', 	'PolicyBranch', 'Resource', 'Technology', 	'UnitClass', 	'Unit')
+
+for table in classList:
+	exec("{}.setFamilyTableProperties()".format(table))
+	exec("{}.setOriginalTypesList()".format(table))
