@@ -18,46 +18,98 @@ SecondaryTablePrefixes = {'BuildingClasses': 	'BuildingClass',
 						  'UnitClasses': 		'UnitClass',
 						  'Units': 				'Unit'}
 
-def open_table(tablename, path):
+def getTable(tablename, path):
 	# Возвращает любой открытый excel-файл с указанным названием по указанному пути
 	return openpyxl.load_workbook(r'{}/{}'.format(path, tablename))
-def open_original_table(tablename):
-	# Возвращает оригинальную таблицу по названию без префиксов и расширений файла
-	return openpyxl.load_workbook(r'{}/NewTU_{}_ORG.xlsx'.format(DB_ORIGINAL_PATH, tablename))
-def open_modified_table(tablename):
-	# Возвращает модифицированную таблицу по названию без префиксов и расширений файла
-	return openpyxl.load_workbook(r'{}/NewTU_{}_ORG.xlsx'.format(DB_MODIFIED_PATH, tablename))
-def get_tables(tablename, original = True):
+def getTableByName(tablename, original = True):
 	# Возвращает оригинальную или модифицированную таблицу по названию без префиксов и расширений файла
-	return open_original_table(tablename) if original else open_modified_table(tablename)
-def get_main_table(tablename, original = True):
-	# Возвращает главную таблицу для указанного типа сущностей
-	WB = get_tables(tablename, original)
-	WS = WB[WB.sheetnames[0]]
-	return WS
-def get_secondary_table(tablename, sheetname, original = True):
-	# Возвращает второстепенную таблицу для указанного типа сущностей по названию этой таблицы
-	WB = get_tables(tablename, original)
-	WS = WB[sheetname]
-	return WS
-def get_main_table_headers(tablename, original = True):
-	# Возвращает словарь заголовков для главной оригинальной или модифицированной таблицы
-	WS = get_main_table(tablename, original)
-	first_row = WS[1]
-	labels = {}
-	pos = 0
-	for cell in first_row:
-		pos += 1
-		labels[cell.value] = pos
-	return labels
-
-def get_proper_subtable_name(mainTableName, tablename):
-	result = '{}_{}'.format(SecondaryTablePrefixes[mainTableName], tablename)
-	tablename = tablename
+	dp_path = DB_ORIGINAL_PATH if original else DB_MODIFIED_PATH
+	suffix  = '_ORG' if original else '_MOD'
+	return openpyxl.load_workbook(r'{}/NewTU_{}{}.xlsx'.format(dp_path, tablename, suffix))
+def getProperTableName(tableName, sheetName):
+	# сопоставляет наименованию каждой вкладки excel-файла правильное наименование таблицы в базе данных
+	prefixes = {'BuildingClasses': 		'BuildingClass',
+				'Buildings': 			'Building',
+				'Civilizations': 		'Civilization',
+				'Eras': 				'Era',
+				'Features': 			'Feature',
+				'FakeFeatures': 		'Feature',
+				'Improvements': 		'Improvement',
+				'Leaders': 				'Leader',
+				'Policies': 			'Policy',
+				'PolicyBranchTypes':	'PolicyBranch',
+				'Resources': 			'Resource',
+				'Technologies': 		'Technology',
+				'UnitClasses': 			'UnitClass',
+				'Units': 				'Unit'}
+	result = sheetName if sheetName in prefixes.keys() else '{}_{}'.format(prefixes[tableName], sheetName)
 	if result == 'Building_DomainFreeExperiencePerGW': 		result = 'Building_DomainFreeExperiencePerGreatWork'
 	if result == 'Policy_BuildinClassProductionModifiers': 	result = 'Policy_BuildingClassProductionModifiers'
-	if result == 'Feature_FakeFeatures': 					result = 'FakeFeatures'
 	return result
+def getHeades(workSheet):
+	# Возвращает словарь заголовков таблицы в виде <Номер ячейки> => <Заголовок столбца>
+	result = {}
+	for cell in workSheet[1]: result[cell.column] = cell.value
+	return result
+def parseCiv5Table(tablename, original = True):
+	WB 			= getTableByName(tablename, original)	# Открытый файл excel-таблицы
+	ENTITIES 	= {}									# Результирующий словарь сущностей
+
+	SHEETS 		= {}									# Словарь вкладок <Название вкладки> => <Название таблицы>
+	for sheetName in WB.sheetnames: SHEETS[sheetName] = getProperTableName(tablename, sheetName)
+
+	for sheetName, tableName in SHEETS.items():
+		WS 			= WB[sheetName]
+		HEADERS 	= getHeades(WS)
+
+		if sheetName == tableName:
+			for row_index in range(3, WS.max_row + 1):
+				entityLine = {}
+				for col_index, header in HEADERS.items():
+					resultLine = {}
+					if header:
+						address 	= '{}{}'.format(get_column_letter(col_index), row_index)
+						entityLine[header] = WS[address].value
+				entityName = entityLine['Type']
+				if entityName not in ENTITIES.keys(): ENTITIES[entityName] = {tableName: entityLine}
+
+		else:
+			firstHeader 	= WS['A1'].value
+			secondName 		= WS['A2'].value
+			secondValue		= None
+			entityValues	= {}
+
+			for row_index in range(3, WS.max_row + 1):
+				entityName		= WS['A{}'.format(row_index)].value
+				if entityName not in ENTITIES.keys(): 			  raise	ValueError
+				if tableName  not in ENTITIES[entityName].keys(): ENTITIES[entityName] = {tableName: []}
+
+				for col_index, header in HEADERS.items():
+					address 	= '{}{}'.format(get_column_letter(col_index), row_index)
+					cellValue 	= WS[address].value
+					if cellValue:
+						if cellValue != entityName:
+							result = {firstHeader: entityName, }
+							if secondName:
+								result[secondName] 	= WS['{}2'.format(get_column_letter(col_index))].value
+							result[header] = cellValue
+							ENTITIES[entityName][tableName].append(result)
+	print(ENTITIES)
+'''
+		for row_index in range(3, WS.max_row + 1):
+			entityLine = {}
+			for col_index, header in HEADERS.items():
+				if header:
+					address 	= '{}{}'.format(get_column_letter(col_index), row_index)
+					someValue 	= WS[address].value
+					if someValue:
+						entityLine[header] = someValue
+						if itemName:
+							itemValue = WS['{}2'.format(get_column_letter(col_index))].value
+							if itemValue == itemName: itemValue = None
+					if itemValue: entityLine[itemName] = itemValue'''
+			#if sheetName == 'Flavors': print(entityLine)
+
 def parse_excel_Civ5_table(tablename, original = True):
 	# Метод для парсинга всей заданной таблицы
 	workbook = get_tables(tablename, original)	# Получаем объект excel-файла для обработки

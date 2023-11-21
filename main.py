@@ -16,6 +16,7 @@ def get_table_names(tables):
 		#exec("print({}.OriginalEntities)".format(table))
 		exec("{}('')".format(table))
 
-get_table_names(tables2)
+table = parseCiv5Table('Buildings')
+
 
 DB_ORIGINAL.close()
