@@ -4,20 +4,6 @@ from openpyxl.utils import get_column_letter, column_index_from_string
 DB_ORIGINAL_PATH = r'Original/Tables'
 DB_MODIFIED_PATH = r'Modified/Tables'
 
-SecondaryTablePrefixes = {'BuildingClasses': 	'BuildingClass',
-						  'Buildings': 			'Building',
-						  'Civilizations': 		'Civilization',
-						  'Eras': 				'Era',
-						  'Features': 			'Feature',
-						  'Improvements': 		'Improvement',
-						  'Leaders': 			'Leader',
-						  'Policies': 			'Policy',
-						  'PolicyBranchTypes': 	'PolicyBranch',
-						  'Resources': 			'Resource',
-						  'Technologies': 		'Technology',
-						  'UnitClasses': 		'UnitClass',
-						  'Units': 				'Unit'}
-
 def getTable(tablename, path):
 	# Возвращает любой открытый excel-файл с указанным названием по указанному пути
 	return openpyxl.load_workbook(r'{}/{}'.format(path, tablename))
@@ -71,145 +57,30 @@ def parseCiv5Table(tablename, original = True):
 						address 	= '{}{}'.format(get_column_letter(col_index), row_index)
 						entityLine[header] = WS[address].value
 				entityName = entityLine['Type']
-				if entityName not in ENTITIES.keys(): ENTITIES[entityName] = {tableName: entityLine}
+				if entityName not in ENTITIES.keys(): ENTITIES[entityName] = {}
+				ENTITIES[entityName][tableName] = entityLine
 
-		else:
+		for k, v in ENTITIES.items(): print(k, v)
+
+		if sheetName != tableName:
 			firstHeader 	= WS['A1'].value
 			secondName 		= WS['A2'].value
-			secondValue		= None
-			entityValues	= {}
 
 			for row_index in range(3, WS.max_row + 1):
-				entityName		= WS['A{}'.format(row_index)].value
+				entityName		= WS[f'A{row_index}'].value
 				if entityName not in ENTITIES.keys(): 			  raise	ValueError
-				if tableName  not in ENTITIES[entityName].keys(): ENTITIES[entityName] = {tableName: []}
+				if tableName  not in ENTITIES[entityName].keys(): ENTITIES[entityName][tableName] = []
 
 				for col_index, header in HEADERS.items():
-					address 	= '{}{}'.format(get_column_letter(col_index), row_index)
+					col_letter = get_column_letter(col_index)
+					address 	= f'{col_letter}{row_index}'
 					cellValue 	= WS[address].value
 					if cellValue:
 						if cellValue != entityName:
 							result = {firstHeader: entityName, }
 							if secondName:
-								result[secondName] 	= WS['{}2'.format(get_column_letter(col_index))].value
+								result[secondName] 	= WS[f'{col_letter}2'].value
 							result[header] = cellValue
 							ENTITIES[entityName][tableName].append(result)
-	print(ENTITIES)
-'''
-		for row_index in range(3, WS.max_row + 1):
-			entityLine = {}
-			for col_index, header in HEADERS.items():
-				if header:
-					address 	= '{}{}'.format(get_column_letter(col_index), row_index)
-					someValue 	= WS[address].value
-					if someValue:
-						entityLine[header] = someValue
-						if itemName:
-							itemValue = WS['{}2'.format(get_column_letter(col_index))].value
-							if itemValue == itemName: itemValue = None
-					if itemValue: entityLine[itemName] = itemValue'''
-			#if sheetName == 'Flavors': print(entityLine)
-
-def parse_excel_Civ5_table(tablename, original = True):
-	# Метод для парсинга всей заданной таблицы
-	workbook = get_tables(tablename, original)	# Получаем объект excel-файла для обработки
-	mainTableName  = workbook.sheetnames[0]		# Название главной таблицы
-	subTableNames  = workbook.sheetnames[1:]		# Названия второстепенных таблиц
-	properSubNames = [get_proper_subtable_name(mainTableName, x) for x in subTableNames]
-
-	ENTITIES = {} # результирующий словарь всех сущностей, представленных в таблице
-
-	# Первым делом обрабатываем главную таблицу, чтобы создать все необходимые сущности и заполнить их основные характеристики
-	mainTable = workbook[mainTableName]
-	headers   = {}
-	for cell in mainTable[1]: headers[cell.value] = cell.column
-
-	for row_index in range(3, mainTable.max_row + 1):
-		name 		= mainTable[row_index][headers['Type'] - 1].value
-		ENTITIES[name] = {'EntityType': mainTableName,
-						  mainTableName: {}}
-		for subname in properSubNames:
-			ENTITIES[name][subname] = {'TableType': 	None,
-									   'TableValues':	[]}
-		for key, val in headers.items():
-			address = '{}{}'.format(get_column_letter(val), row_index)
-			if key: ENTITIES[name][mainTableName][key] = mainTable[address].value
-	# Приступаем к обработке второстепенных таблиц
-	for subtablename in subTableNames:
-		subTable 	 	= workbook[subtablename]
-		subTableKey  	= get_proper_subtable_name(mainTableName, subtablename)
-		subTableType 	= subTable['A2'].value
-		subTableValues 	= {}
-
-		if subTableType == 'OneType_HeadersState_Reference':
-			for rowNum in range(3, subTable.max_row + 1):
-				entityName	= subTable['A{}'.format(rowNum)].value
-				properValue	= subTable['B{}'.format(rowNum)].value
-				if properValue:
-					if subTableKey not in ENTITIES[entityName].keys(): raise TypeError
-					ENTITIES[entityName][subTableKey]['TableType'] = subTableType
-					ENTITIES[entityName][subTableKey]['TableValues'].append(properValue)
-		elif subTableType == 'OneType_HeadersValue_Quantable':
-			thisHeaders = {}
-			for cell in subTable[1]:
-				if cell.column != 1: thisHeaders[cell.value] = cell.column
-			for row_index in range(3, subTable.max_row + 1):
-				entityName	= subTable['A{}'.format(row_index)].value
-				properValues = {}
-				for key, val in thisHeaders.items():
-					address = '{}{}'.format(get_column_letter(val), row_index)
-					cellValue = subTable[address].value
-					if cellValue: properValues[key] = cellValue
-				if properValues:
-					ENTITIES[entityName][subTableKey]['TableType'] = subTableType
-					ENTITIES[entityName][subTableKey]['TableValues'] = properValues.copy()
-		elif subTableType == 'OneType_HeadersValue_Check':
-			thisHeaders = {}
-			for cell in subTable[1]:
-				if cell.column != 1: thisHeaders[cell.value] = cell.column
-			for row_index in range(3, subTable.max_row + 1):
-				entityName	= subTable['A{}'.format(row_index)].value
-				properValues = []
-				for key, val in thisHeaders.items():
-					address = '{}{}'.format(get_column_letter(val), row_index)
-					cellValue = subTable[address].value
-					if cellValue: properValues.append(key)
-				if properValues:
-					ENTITIES[entityName][subTableKey]['TableType'] = subTableType
-					ENTITIES[entityName][subTableKey]['TableValues'] = properValues.copy()
-		elif subTableType == 'MultiType_HeadersValue_Quantable':
-			thisHeaders = {}
-			for cell in subTable[1]:
-				if cell.column > 2: thisHeaders[cell.value] = cell.column
-			for row_index in range(3, subTable.max_row + 1):
-				entityName	= subTable['A{}'.format(row_index)].value
-				secondCol	= subTable['B{}'.format(row_index)].value
-				properValues = []
-				if secondCol:
-					for key, val in thisHeaders.items():
-						address = '{}{}'.format(get_column_letter(val), row_index)
-						cellValue = subTable[address].value
-						if cellValue:
-							properValues.append((key, secondCol, cellValue))
-				if properValues:
-					ENTITIES[entityName][subTableKey]['TableType'] = subTableType
-					for x in properValues: ENTITIES[entityName][subTableKey]['TableValues'].append(x)
-		elif subTableType == 'MultiType_HeadersState_Quantable':
-			thisHeaders = {}
-			for cell in subTable[1]:
-				if cell.column > 1: thisHeaders[cell.value] = cell.column
-			for row_index in range(3, subTable.max_row + 1):
-				entityName	= subTable['A{}'.format(row_index)].value
-				secondCol	= subTable['B{}'.format(row_index)].value
-				properValues = []
-				if secondCol:
-					for key, val in thisHeaders.items():
-						address = '{}{}'.format(get_column_letter(val), row_index)
-						cellValue = subTable[address].value
-						if cellValue:
-							#properValues.append((key, secondCol, cellValue))
-							print(entityName, secondCol, cellValue)
-		else:
-			pass
 
 	return ENTITIES
