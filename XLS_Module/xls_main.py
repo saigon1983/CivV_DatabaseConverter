@@ -31,6 +31,7 @@ def getProperTableName(tableName, sheetName):
 	result = sheetName if sheetName in prefixes.keys() else '{}_{}'.format(prefixes[tableName], sheetName)
 	if result == 'Building_DomainFreeExperiencePerGW': 		result = 'Building_DomainFreeExperiencePerGreatWork'
 	if result == 'Policy_BuildinClassProductionModifiers': 	result = 'Policy_BuildingClassProductionModifiers'
+	if result == 'Civilization__Leaders': 	result = 'Civilization_Leaders'
 	return result
 def getHeades(workSheet):
 	# Возвращает словарь заголовков таблицы в виде <Номер ячейки> => <Заголовок столбца>
@@ -60,27 +61,43 @@ def parseCiv5Table(tablename, original = True):
 				if entityName not in ENTITIES.keys(): ENTITIES[entityName] = {}
 				ENTITIES[entityName][tableName] = entityLine
 
-		for k, v in ENTITIES.items(): print(k, v)
-
 		if sheetName != tableName:
 			firstHeader 	= WS['A1'].value
 			secondName 		= WS['A2'].value
+			thirdName 		= WS['B1'].value if not WS['B2'].value else None
 
 			for row_index in range(3, WS.max_row + 1):
-				entityName		= WS[f'A{row_index}'].value
+				entityName	= WS[f'A{row_index}'].value
+				wholeLine	= False
+				resultLine 	= {}
+
 				if entityName not in ENTITIES.keys(): 			  raise	ValueError
 				if tableName  not in ENTITIES[entityName].keys(): ENTITIES[entityName][tableName] = []
 
 				for col_index, header in HEADERS.items():
-					col_letter = get_column_letter(col_index)
+					col_letter 	= get_column_letter(col_index)
 					address 	= f'{col_letter}{row_index}'
 					cellValue 	= WS[address].value
-					if cellValue:
-						if cellValue != entityName:
-							result = {firstHeader: entityName, }
-							if secondName:
-								result[secondName] 	= WS[f'{col_letter}2'].value
-							result[header] = cellValue
-							ENTITIES[entityName][tableName].append(result)
+
+					if secondName:
+						if cellValue:
+							if cellValue != entityName:
+								result = {firstHeader: entityName, }
+								if thirdName and col_letter == 'B': continue
+								if thirdName: result[thirdName] = WS[f'B{row_index}'].value
+								result[secondName] = WS[f'{col_letter}2'].value
+								if cellValue != '+': result[header] = cellValue
+								ENTITIES[entityName][tableName].append(result)
+					else:
+						if not wholeLine and col_index > 1 and cellValue: wholeLine = True
+						if wholeLine and cellValue and col_index > 1: resultLine[header] = cellValue
+				if resultLine:
+					result = {firstHeader: entityName, }
+					result.update(resultLine)
+					ENTITIES[entityName][tableName].append(result)
+
+		if sheetName == '_Leaders':
+			for k, v in ENTITIES.items(): print(k, v)
+
 
 	return ENTITIES

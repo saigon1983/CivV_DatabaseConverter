@@ -9,14 +9,14 @@ tables2 = ('BuildingClass', 'Building', 'Civilization', 'Era', 'Feature', 'FakeF
 def parseXLS():
 	for table in tables1:
 		print('---------- >>>>> Идет обработка таблицы {}'.format(table))
-		parse_excel_Civ5_table(table)
+		parseCiv5Table(table)
 
 def get_table_names(tables):
 	for table in tables:
 		#exec("print({}.OriginalEntities)".format(table))
 		exec("{}('')".format(table))
 
-table = parseCiv5Table('Buildings')
+table = parseCiv5Table('Civilizations')
 
 
 DB_ORIGINAL.close()
