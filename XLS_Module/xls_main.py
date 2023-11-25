@@ -33,7 +33,7 @@ def getProperTableName(tableName, sheetName):
 	if result == 'Policy_BuildinClassProductionModifiers': 	result = 'Policy_BuildingClassProductionModifiers'
 	if result == 'Civilization__Leaders': 					result = 'Civilization_Leaders'
 	if result == 'Civilization__Religions': 				result = 'Civilization_Religions'
-	if result == 'Leader__Traits': 							result = 'Leaders_Traits'
+	if result == 'Leader__Traits': 							result = 'Leader_Traits'
 	if result == 'Unit__Buildings': 						result = 'Unit_Buildings'
 	if result == 'Unit__Builds': 							result = 'Unit_Builds'
 	return result
@@ -63,7 +63,7 @@ def parseCiv5Table(tablename, original = True):
 						entityLine[header] = WS[address].value
 				entityName = entityLine['Type']
 				if entityName not in ENTITIES.keys(): ENTITIES[entityName] = {}
-				ENTITIES[entityName][tableName] = entityLine
+				ENTITIES[entityName][tableName] = [entityLine]
 
 		if sheetName != tableName:
 			firstHeader 	= WS['A1'].value

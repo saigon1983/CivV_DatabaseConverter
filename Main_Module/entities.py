@@ -16,9 +16,22 @@ class Civ5Value:
 
 	def __str__(self):
 		return '{}: {} ({}, {})'.format(self.name, self.value, self.type, self.is_default())
+	def __repr__(self):
+		return '{}: {} ({}, {})'.format(self.name, self.value, self.type, self.is_default())
 	def is_default(self):
 		return self.value == self.default
 
+class Civ5ValuesGroup:
+	def __init__(self, groupName, defaults):
+		self.name   = groupName
+		self.values = {}
+		self.values['Default'] = []
+		for valueName, thisValue in defaults.items():
+			newValue = Civ5Value(valueName, thisValue['DefaultValue'], thisValue)
+			self.values['Default'].append(newValue)
+		self.values['Default'] = tuple(self.values['Default'])
+	def insertValues(self, values):
+		pass
 class Civ5Entity:
 	# Общий родительский класс для всех типов сущностей Civilization 5
 	MainTableName 		= ''	# Название основной таблицы (тип сущности)
@@ -148,11 +161,25 @@ class Civ5Entity:
 	def setOriginalTypesList(cls):
 		cls.OriginalEntities = [x[0] for x in DB_ORIGINAL.execute("SELECT Type FROM {}".format(cls.MainTableName)).fetchall()]
 
-	def __init__(self, someData = ''):
+	def __init__(self, rawData):
 		self._set_template()
+		rawData = rawData
+		for tableName, valuesList in rawData.items():
+			if tableName not in self.DATA.keys(): raise KeyError(f'Таблица <{tableName}> не обнаружена в основной базе данных!')
+			if valuesList:
+
+				for queve in valuesList:
+					pass
+					#print(self.DATA[tableName], queve)
+			else:
+				pass
+
+
 	def _set_template(self):
 		self.DATA = {}
+		self.data = {}
 		for tablename, defaults in self.TableProperties.items():
+			newGroup = Civ5ValuesGroup(tablename, defaults)
 			self.DATA[tablename] = []
 			newValues = []
 			for key, val in defaults.items():
@@ -160,7 +187,7 @@ class Civ5Entity:
 				value  	 = val['DefaultValue']
 				newValue = Civ5Value(name, value, val)
 				newValues.append(newValue)
-			self.DATA[tablename].append(newValues)
+			self.DATA[tablename] = newValues
 
 	def __init2__(self, primaryData):
 		for key, value in primaryData.items():
@@ -194,86 +221,86 @@ class BuildingClass(Civ5Entity):
 	MainTableName		= 'BuildingClasses'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, someData):
-		super().__init__(someData)
+	def __init__(self, rawData):
+		super().__init__(rawData)
 class Building(Civ5Entity):
 	MainTableName		= 'Buildings'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, someData):
-		super().__init__(someData)
+	def __init__(self, rawData):
+		super().__init__(rawData)
 class Civilization(Civ5Entity):
 	MainTableName		= 'Civilizations'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, someData):
-		super().__init__(someData)
+	def __init__(self, rawData):
+		super().__init__(rawData)
 class Era(Civ5Entity):
 	MainTableName		= 'Eras'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, someData):
-		super().__init__(someData)
+	def __init__(self, rawData):
+		super().__init__(rawData)
 class Feature(Civ5Entity):
 	MainTableName		= 'Features'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, someData):
-		super().__init__(someData)
+	def __init__(self, rawData):
+		super().__init__(rawData)
 class FakeFeature(Civ5Entity):
 	MainTableName		= 'FakeFeatures'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, someData):
-		super().__init__(someData)
+	def __init__(self, rawData):
+		super().__init__(rawData)
 class Improvement(Civ5Entity):
 	MainTableName		= 'Improvements'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, someData):
-		super().__init__(someData)
+	def __init__(self, rawData):
+		super().__init__(rawData)
 class Leader(Civ5Entity):
 	MainTableName		= 'Leaders'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, someData):
-		super().__init__(someData)
+	def __init__(self, rawData):
+		super().__init__(rawData)
 class Policy(Civ5Entity):
 	MainTableName		= 'Policies'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, someData):
-		super().__init__(someData)
+	def __init__(self, rawData):
+		super().__init__(rawData)
 class PolicyBranch(Civ5Entity):
 	MainTableName		= 'PolicyBranchTypes'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, someData):
-		super().__init__(someData)
+	def __init__(self, rawData):
+		super().__init__(rawData)
 class Resource(Civ5Entity):
 	MainTableName		= 'Resources'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, someData):
-		super().__init__(someData)
+	def __init__(self, rawData):
+		super().__init__(rawData)
 class Technology(Civ5Entity):
 	MainTableName		= 'Technologies'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, someData):
-		super().__init__(someData)
+	def __init__(self, rawData):
+		super().__init__(rawData)
 class UnitClass(Civ5Entity):
 	MainTableName		= 'UnitClasses'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, someData):
-		super().__init__(someData)
+	def __init__(self, rawData):
+		super().__init__(rawData)
 class Unit(Civ5Entity):
 	MainTableName		= 'Units'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, someData):
-		super().__init__(someData)
+	def __init__(self, rawData):
+		super().__init__(rawData)
 
 classList = ('BuildingClass', 'Building', 	'Civilization', 'Era', 		'Feature', 		'FakeFeature', 	'Improvement',
 		  	 'Leader', 		  'Policy', 	'PolicyBranch', 'Resource', 'Technology', 	'UnitClass', 	'Unit')
