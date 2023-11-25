@@ -31,7 +31,11 @@ def getProperTableName(tableName, sheetName):
 	result = sheetName if sheetName in prefixes.keys() else '{}_{}'.format(prefixes[tableName], sheetName)
 	if result == 'Building_DomainFreeExperiencePerGW': 		result = 'Building_DomainFreeExperiencePerGreatWork'
 	if result == 'Policy_BuildinClassProductionModifiers': 	result = 'Policy_BuildingClassProductionModifiers'
-	if result == 'Civilization__Leaders': 	result = 'Civilization_Leaders'
+	if result == 'Civilization__Leaders': 					result = 'Civilization_Leaders'
+	if result == 'Civilization__Religions': 				result = 'Civilization_Religions'
+	if result == 'Leader__Traits': 							result = 'Leaders_Traits'
+	if result == 'Unit__Buildings': 						result = 'Unit_Buildings'
+	if result == 'Unit__Builds': 							result = 'Unit_Builds'
 	return result
 def getHeades(workSheet):
 	# Возвращает словарь заголовков таблицы в виде <Номер ячейки> => <Заголовок столбца>
@@ -49,7 +53,7 @@ def parseCiv5Table(tablename, original = True):
 		WS 			= WB[sheetName]
 		HEADERS 	= getHeades(WS)
 
-		if sheetName == tableName:
+		if sheetName == tableName or sheetName == 'FakeFeatures':
 			for row_index in range(3, WS.max_row + 1):
 				entityLine = {}
 				for col_index, header in HEADERS.items():
@@ -70,8 +74,9 @@ def parseCiv5Table(tablename, original = True):
 				entityName	= WS[f'A{row_index}'].value
 				wholeLine	= False
 				resultLine 	= {}
+				#print(sheetName, entityName, row_index, WS.max_row + 1)
 
-				if entityName not in ENTITIES.keys(): 			  raise	ValueError
+				if entityName not in ENTITIES.keys(): 			  raise	ValueError(f'{entityName} not in ENTITIES')
 				if tableName  not in ENTITIES[entityName].keys(): ENTITIES[entityName][tableName] = []
 
 				for col_index, header in HEADERS.items():
@@ -90,14 +95,20 @@ def parseCiv5Table(tablename, original = True):
 								ENTITIES[entityName][tableName].append(result)
 					else:
 						if not wholeLine and col_index > 1 and cellValue: wholeLine = True
+						if WS[f'B1'].value == WS[f'C1'].value: wholeLine = False
 						if wholeLine and cellValue and col_index > 1: resultLine[header] = cellValue
+						if not wholeLine:
+							if cellValue:
+								if cellValue != entityName:
+									result = {firstHeader: entityName, }
+									if cellValue != '+': result[header] = cellValue
+									ENTITIES[entityName][tableName].append(result)
 				if resultLine:
 					result = {firstHeader: entityName, }
 					result.update(resultLine)
 					ENTITIES[entityName][tableName].append(result)
 
-		if sheetName == '_Leaders':
-			for k, v in ENTITIES.items(): print(k, v)
-
+		#if sheetName == 'Flavors':
+		#	for k, v in ENTITIES.items(): print(k, v)
 
 	return ENTITIES
