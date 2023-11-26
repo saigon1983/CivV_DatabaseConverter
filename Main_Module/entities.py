@@ -1,12 +1,14 @@
 from SQL_Module.sql_main import *
 from Main_Module.constants import *
+from XML_Module.xml_main import *
+from pprint import pprint
 import re
 
 class Civ5Value:
 	def __init__(self, name, value, attributes):
 		self.name  		= name
 		self.value 		= value
-		if attributes == None: raise AttributeError('Список атрибутов, переданный для значения {} пуст!'.format(self.name))
+		assert attributes != None, f'Список атрибутов, переданный для значения {self.name} пуст!'
 		self.type 		= attributes['DataType']
 		self.default 	= attributes['DefaultValue']
 		self.reference 	= attributes['References']
@@ -14,24 +16,58 @@ class Civ5Value:
 		self.notnull 	= attributes['NotNull']
 		self.unique 	= attributes['Unique']
 
+		if self.value == None and self.default != None: self.value = self.default
 	def __str__(self):
-		return '{}: {} ({}, {})'.format(self.name, self.value, self.type, self.is_default())
+		return f'{self.name}: {self.value} ({self.type}, {self.notDefault()})'
 	def __repr__(self):
-		return '{}: {} ({}, {})'.format(self.name, self.value, self.type, self.is_default())
-	def is_default(self):
-		return self.value == self.default
+		return f'{self.name}: {self.value} ({self.type}, {self.notDefault()})'
+	def notDefault(self):
+		return not (self.value == self.default)
+	def xml(self):
+		return placeLine(self.name, self.value, 0, False)
 
 class Civ5ValuesGroup:
-	def __init__(self, groupName, defaults):
-		self.name   = groupName
-		self.values = {}
-		self.values['Default'] = []
-		for valueName, thisValue in defaults.items():
-			newValue = Civ5Value(valueName, thisValue['DefaultValue'], thisValue)
-			self.values['Default'].append(newValue)
-		self.values['Default'] = tuple(self.values['Default'])
-	def insertValues(self, values):
-		pass
+	def __init__(self, groupName, someData, defaults):
+		self.name = groupName
+		self.data = []
+
+		for data in someData:
+			queue = []
+			for name, value in data.items():
+				queue.append(Civ5Value(name, value, defaults[name]))
+			self.data.append(tuple(queue))
+		if groupName == "Units":
+			pass
+			print(self.xml_short("Insert"))
+			#print('-'*20)
+	def get_command(self, tag):
+		assert tag in ("Row", "InsertOrAbort", "Insert", "Replace", "Update"), "ОШИБКА!"
+		command = None
+		if tag == "Row": command = placeRow
+		elif tag == "Replace": command = placeReplace
+		elif tag in ("InsertOrAbort", "Insert"): command = placeInsert
+		return command
+	def xml(self, tag = "Row"):
+		result = ""
+		for queue in self.data:
+			for element in queue:
+				if element.value:
+					result += element.xml()
+					result += "\n"
+		result = self.get_command(tag)(result)
+		return result
+	def xml_short(self, tag = "Row"):
+		result = ""
+		for queue in self.data:
+			for element in queue:
+				print(element)
+				if element.notDefault():
+					if element.value != None:
+						result += element.xml()
+						result += "\n"
+		result = self.get_command(tag)(result)
+		return result
+
 class Civ5Entity:
 	# Общий родительский класс для всех типов сущностей Civilization 5
 	MainTableName 		= ''	# Название основной таблицы (тип сущности)
@@ -72,7 +108,7 @@ class Civ5Entity:
 		for tablename in family_table_names:
 			cls.TableProperties[tablename] = {}
 
-			start  	= SQLDBFILE.find('CREATE TABLE IF NOT EXISTS "{}" ('.format(tablename))
+			start  	= SQLDBFILE.find(f'CREATE TABLE IF NOT EXISTS "{tablename}" (')
 			finish 	= start+SQLDBFILE[start:].find(');')
 			sqlfile = SQLDBFILE[start:finish].splitlines()
 			for line in sqlfile[1:]:
@@ -100,11 +136,11 @@ class Civ5Entity:
 				if not columnName: raise ValueError
 				if columnName not in cls.TableProperties[tablename].keys():
 					cls.TableProperties[tablename][columnName] = {'DataType': 		None,
-															  'DefaultValue': 	None,
-															  'References': 	None,
-															  'AutoIncrement': 	None,
-															  'NotNull': 		None,
-															  'Unique': 		None}
+															  	  'DefaultValue': 	None,
+															  	  'References': 	None,
+															  	  'AutoIncrement': 	None,
+															  	  'NotNull': 		None,
+															  	  'Unique': 		None}
 				if line.startswith('AUTOINCREMENT'):
 					line = line.replace('AUTOINCREMENT', '').strip()
 					cls.TableProperties[tablename][columnName]['AutoIncrement'] = True
@@ -161,62 +197,11 @@ class Civ5Entity:
 	def setOriginalTypesList(cls):
 		cls.OriginalEntities = [x[0] for x in DB_ORIGINAL.execute("SELECT Type FROM {}".format(cls.MainTableName)).fetchall()]
 
-	def __init__(self, rawData):
-		self._set_template()
-		rawData = rawData
-		for tableName, valuesList in rawData.items():
-			if tableName not in self.DATA.keys(): raise KeyError(f'Таблица <{tableName}> не обнаружена в основной базе данных!')
-			if valuesList:
-
-				for queve in valuesList:
-					pass
-					#print(self.DATA[tableName], queve)
-			else:
-				pass
-
-
-	def _set_template(self):
-		self.DATA = {}
-		self.data = {}
-		for tablename, defaults in self.TableProperties.items():
-			newGroup = Civ5ValuesGroup(tablename, defaults)
-			self.DATA[tablename] = []
-			newValues = []
-			for key, val in defaults.items():
-				name 	 = key
-				value  	 = val['DefaultValue']
-				newValue = Civ5Value(name, value, val)
-				newValues.append(newValue)
-			self.DATA[tablename] = newValues
-
-	def __init2__(self, primaryData):
-		for key, value in primaryData.items():
-			curColumn 	= key
-			curValue  	= value
-
-			if key == 'EntityType':
-				if not self.__class__.MainTableName: self.set_main_table_name(value)
-				if not self.__class__.OriginalTypes: self.select_original_types()
-			elif key == 'TableNames':
-				if not self.__class__.ValidTables: self.set_valid_tables(value)
-			elif key == 'SecondaryTables':
-				pass
-			else:
-				curAttribs	= self.ValidTables[self.MainTableName][key]
-
-				if curAttribs['DataType'] == 'INTEGER':
-					try: 	curValue = int(curValue)
-					except: pass
-					if curValue and type(curValue) != int: raise ValueError
-				elif curAttribs['DataType'] == 'TEXT': pass
-				elif curAttribs['DataType'] == 'BOOLEAN':
-					if curValue not in ('false', 'true') and curValue != None:
-						raise TypeError('Table <{}>: column <{}> has value <{}>. Must be in <<false, true>>'.format(self.MainTableName, curColumn, curValue))
-				else: raise TypeError('Table <{}>: Unrecognized data type <{}> in column <{}>'.format(self.MainTableName, curAttribs['DataType'], curColumn))
-				if curValue is None: curValue = curAttribs['DefaultValue']
-				self.__setattr__(curColumn, Civ5Value(curColumn, curValue, curAttribs))
-		self.Original = True if self.Type.value in self.OriginalTypes else False
-
+	def __init__(self, someData):
+		rawData = someData
+		for tablename, data in rawData.items():
+			defaults = self.TableProperties[tablename]
+			newGroup = Civ5ValuesGroup(tablename, data, defaults)
 class BuildingClass(Civ5Entity):
 	MainTableName		= 'BuildingClasses'
 	OriginalEntities	= []
@@ -306,5 +291,5 @@ classList = ('BuildingClass', 'Building', 	'Civilization', 'Era', 		'Feature', 	
 		  	 'Leader', 		  'Policy', 	'PolicyBranch', 'Resource', 'Technology', 	'UnitClass', 	'Unit')
 
 for table in classList:
-	exec("{}.setFamilyTableProperties()".format(table))
-	exec("{}.setOriginalTypesList()".format(table))
+	exec(f"{table}.setFamilyTableProperties()")
+	exec(f"{table}.setOriginalTypesList()")

@@ -59,7 +59,9 @@ def placeEntry(someTag, someBody, indents = 0, someComment = ""):
 def placeRow(someBody, indents = 0, someComment = ""):
 	return placeEntry("Row", someBody, indents, someComment) if someBody else ""
 def placeReplace(someBody, indents = 0, someComment = ""):
-	return placeEntry("Replace", someBody, indents, someComment)
+	return placeEntry("Replace", someBody, indents, someComment) if someBody else ""
+def placeInsert(someBody, indents = 0, someComment = ""):
+	return placeEntry("InsertOrAbort", someBody, indents, someComment)
 def placeDelete(indents = 0, someDict = {}):
 	return f"{indent(indents)}<Delete/>\n" if not someDict else f"{indent(indents)}<Delete {placePairs(someDict)} />\n"
 def placeUpdate(someCondition = {}, someBody = {}, indents = 0, someComment = ""):
