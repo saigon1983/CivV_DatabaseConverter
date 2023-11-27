@@ -28,7 +28,7 @@ def parseXLS():
 		for entityName, entityData in entitiesDict.items():
 			entityTables 	= list(entityData.keys())
 			newClass 		= tableNamesToClasses[entityTables[0]]
-			newEntity 		= newClass(entityData)
+			newEntity 		= newClass(entityName, entityData)
 			#print(entityName, type(newEntity))
 
 def get_table_names(tables):

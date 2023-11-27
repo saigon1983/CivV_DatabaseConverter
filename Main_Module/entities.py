@@ -1,7 +1,6 @@
 from SQL_Module.sql_main import *
 from Main_Module.constants import *
 from XML_Module.xml_main import *
-from pprint import pprint
 import re
 
 class Civ5Value:
@@ -31,42 +30,49 @@ class Civ5ValuesGroup:
 		self.name = groupName
 		self.data = []
 
+		print("="*20)
+		print(self.name)
+
 		for data in someData:
 			queue = []
+			requests = []
 			for name, value in data.items():
+				sqlName  = name
+				sqlValue = value
+				if name == 'Unique':
+					print("!!!!!")
+					sqlName = f"'{name}'"
+				requests.append(f"{sqlName} = '{sqlValue}' ")
+
 				queue.append(Civ5Value(name, value, defaults[name]))
+			request = f"SELECT * FROM {self.name} WHERE {'AND '.join(requests[:-1])} "
+			sqlValue = DB_ORIGINAL.execute(request)
+			if self.name.startswith("Resource"):
+				print(request)
+				print(sqlValue.fetchone())
+				print(queue)
+			print('*'*20)
 			self.data.append(tuple(queue))
-		if groupName == "Units":
-			pass
-			print(self.xml_short("Insert"))
-			#print('-'*20)
-	def get_command(self, tag):
-		assert tag in ("Row", "InsertOrAbort", "Insert", "Replace", "Update"), "ОШИБКА!"
-		command = None
-		if tag == "Row": command = placeRow
-		elif tag == "Replace": command = placeReplace
-		elif tag in ("InsertOrAbort", "Insert"): command = placeInsert
-		return command
-	def xml(self, tag = "Row"):
+		print("="*20)
+		self.elements = len(self.data)
+	def xml(self, tag = "Row", short = True):
 		result = ""
 		for queue in self.data:
+			body = ""
 			for element in queue:
-				if element.value:
-					result += element.xml()
-					result += "\n"
-		result = self.get_command(tag)(result)
+				subbody = ""
+				if element.value != None:
+					subbody += element.xml()
+					subbody += "\n"
+					if short and not element.notDefault(): subbody = ""
+					body += subbody
+			result += getCommand(tag)(body)
 		return result
-	def xml_short(self, tag = "Row"):
-		result = ""
-		for queue in self.data:
-			for element in queue:
-				print(element)
-				if element.notDefault():
-					if element.value != None:
-						result += element.xml()
-						result += "\n"
-		result = self.get_command(tag)(result)
-		return result
+	def xmlGroup(self, tag = "Row", short = True):
+		result = self.xml(tag, short)
+		return placeEntry(self.name, result)
+	def __repr__(self):
+		return f"<Group {self.name} (Elements: {self.elements})>"
 
 class Civ5Entity:
 	# Общий родительский класс для всех типов сущностей Civilization 5
@@ -197,95 +203,106 @@ class Civ5Entity:
 	def setOriginalTypesList(cls):
 		cls.OriginalEntities = [x[0] for x in DB_ORIGINAL.execute("SELECT Type FROM {}".format(cls.MainTableName)).fetchall()]
 
-	def __init__(self, someData):
-		rawData = someData
-		for tablename, data in rawData.items():
+	def __init__(self, thisName, someData):
+		self.name = thisName
+		self.data = []
+		for tablename, data in someData.items():
 			defaults = self.TableProperties[tablename]
 			newGroup = Civ5ValuesGroup(tablename, data, defaults)
+			self.data.append(newGroup)
+		self.real = True if self.name in self.OriginalEntities else False
+
+	def xml(self):
+		result = ""
+		body = ""
+		for group in self.data:
+			body += group.xmlGroup()
+		result = placeGameData(body)
+		return result
 class BuildingClass(Civ5Entity):
 	MainTableName		= 'BuildingClasses'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, rawData):
-		super().__init__(rawData)
+	def __init__(self, thisName, someData):
+		super().__init__(thisName, someData)
 class Building(Civ5Entity):
 	MainTableName		= 'Buildings'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, rawData):
-		super().__init__(rawData)
+	def __init__(self, thisName, someData):
+		super().__init__(thisName, someData)
 class Civilization(Civ5Entity):
 	MainTableName		= 'Civilizations'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, rawData):
-		super().__init__(rawData)
+	def __init__(self, thisName, someData):
+		super().__init__(thisName, someData)
 class Era(Civ5Entity):
 	MainTableName		= 'Eras'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, rawData):
-		super().__init__(rawData)
+	def __init__(self, thisName, someData):
+		super().__init__(thisName, someData)
 class Feature(Civ5Entity):
 	MainTableName		= 'Features'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, rawData):
-		super().__init__(rawData)
+	def __init__(self, thisName, someData):
+		super().__init__(thisName, someData)
 class FakeFeature(Civ5Entity):
 	MainTableName		= 'FakeFeatures'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, rawData):
-		super().__init__(rawData)
+	def __init__(self, thisName, someData):
+		super().__init__(thisName, someData)
 class Improvement(Civ5Entity):
 	MainTableName		= 'Improvements'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, rawData):
-		super().__init__(rawData)
+	def __init__(self, thisName, someData):
+		super().__init__(thisName, someData)
 class Leader(Civ5Entity):
 	MainTableName		= 'Leaders'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, rawData):
-		super().__init__(rawData)
+	def __init__(self, thisName, someData):
+		super().__init__(thisName, someData)
 class Policy(Civ5Entity):
 	MainTableName		= 'Policies'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, rawData):
-		super().__init__(rawData)
+	def __init__(self, thisName, someData):
+		super().__init__(thisName, someData)
 class PolicyBranch(Civ5Entity):
 	MainTableName		= 'PolicyBranchTypes'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, rawData):
-		super().__init__(rawData)
+	def __init__(self, thisName, someData):
+		super().__init__(thisName, someData)
 class Resource(Civ5Entity):
 	MainTableName		= 'Resources'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, rawData):
-		super().__init__(rawData)
+	def __init__(self, thisName, someData):
+		super().__init__(thisName, someData)
 class Technology(Civ5Entity):
 	MainTableName		= 'Technologies'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, rawData):
-		super().__init__(rawData)
+	def __init__(self, thisName, someData):
+		super().__init__(thisName, someData)
 class UnitClass(Civ5Entity):
 	MainTableName		= 'UnitClasses'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, rawData):
-		super().__init__(rawData)
+	def __init__(self, thisName, someData):
+		super().__init__(thisName, someData)
 class Unit(Civ5Entity):
 	MainTableName		= 'Units'
 	OriginalEntities	= []
 	TableProperties 	= {}
-	def __init__(self, rawData):
-		super().__init__(rawData)
+	def __init__(self, thisName, someData):
+		super().__init__(thisName, someData)
 
 classList = ('BuildingClass', 'Building', 	'Civilization', 'Era', 		'Feature', 		'FakeFeature', 	'Improvement',
 		  	 'Leader', 		  'Policy', 	'PolicyBranch', 'Resource', 'Technology', 	'UnitClass', 	'Unit')

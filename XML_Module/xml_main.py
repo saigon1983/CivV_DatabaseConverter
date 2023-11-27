@@ -18,7 +18,7 @@ def tagClose(someTag, indents, newLine = True):
 def placeLine(someTag, someText = "", indents = 0, newLine = True):
 	# Возвращает простую строку данных, если текст не задан
 	assert someTag, "Для метода 'placeLine' не задан тег или тег не является строкой!"
-	return f"{tagOpen(someTag, indents, False)}{str(someText)}{tagClose(someTag, 0, newLine)}" if someText else ""
+	return f"{tagOpen(someTag, indents, False)}{str(someText)}{tagClose(someTag, 0, newLine)}" if someText not in ("", None) else ""
 
 def placePairs(someDict):
 	result = ""
@@ -82,3 +82,10 @@ def placeTableCheck(fileName):
 	result += "/>\n"
 	result += tagClose("DebugTableCheck", 0)
 	return result
+def getCommand(tag):
+	assert tag in ("Row", "InsertOrAbort", "Insert", "Replace", "Update"), "ОШИБКА!"
+	command = None
+	if tag == "Row": command = placeRow
+	elif tag == "Replace": command = placeReplace
+	elif tag in ("InsertOrAbort", "Insert"): command = placeInsert
+	return command

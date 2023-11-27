@@ -1,5 +1,5 @@
 import openpyxl
-from openpyxl.utils import get_column_letter, column_index_from_string
+from openpyxl.utils import get_column_letter
 
 DB_ORIGINAL_PATH = r'Original/Tables'
 DB_MODIFIED_PATH = r'Modified/Tables'
@@ -53,6 +53,7 @@ def parseCiv5Table(tablename, original = True):
 		WS 			= WB[sheetName]
 		HEADERS 	= getHeades(WS)
 
+		# Сперва разбираем основную таблицу (всегда должна быть первой в списке листов!)
 		if sheetName == tableName or sheetName == 'FakeFeatures':
 			for row_index in range(3, WS.max_row + 1):
 				entityLine = {}
@@ -74,7 +75,6 @@ def parseCiv5Table(tablename, original = True):
 				entityName	= WS[f'A{row_index}'].value
 				wholeLine	= False
 				resultLine 	= {}
-				#print(sheetName, entityName, row_index, WS.max_row + 1)
 
 				if entityName not in ENTITIES.keys(): 			  raise	ValueError(f'{entityName} not in ENTITIES')
 				if tableName  not in ENTITIES[entityName].keys(): ENTITIES[entityName][tableName] = []
@@ -107,8 +107,5 @@ def parseCiv5Table(tablename, original = True):
 					result = {firstHeader: entityName, }
 					result.update(resultLine)
 					ENTITIES[entityName][tableName].append(result)
-
-		#if sheetName == 'Flavors':
-		#	for k, v in ENTITIES.items(): print(k, v)
 
 	return ENTITIES
