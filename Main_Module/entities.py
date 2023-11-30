@@ -26,34 +26,33 @@ class Civ5Value:
 		return placeLine(self.name, self.value, 0, False)
 
 class Civ5ValuesGroup:
+	mainTableNames = ('BuildingClasses', 'Buildings', 'Civilizations', 'Eras', 'Features', 'FakeFeatures', 'Improvements',
+					  'Leaders', 'Policies', 'PolicyBranchTypes', 'Resources', 'Technologies', 'UnitClasses', 'Units')
 	def __init__(self, groupName, someData, defaults):
 		self.name = groupName
 		self.data = []
 
-		print("="*20)
-		print(self.name)
-
 		for data in someData:
-			queue = []
+			queue    = []
 			requests = []
+
 			for name, value in data.items():
 				sqlName  = name
 				sqlValue = value
-				if name == 'Unique':
-					print("!!!!!")
-					sqlName = f"'{name}'"
+				if name == 'Unique': sqlName = f"'{name}'"
 				requests.append(f"{sqlName} = '{sqlValue}' ")
-
 				queue.append(Civ5Value(name, value, defaults[name]))
-			request = f"SELECT * FROM {self.name} WHERE {'AND '.join(requests[:-1])} "
-			sqlValue = DB_ORIGINAL.execute(request)
-			if self.name.startswith("Resource"):
-				print(request)
-				print(sqlValue.fetchone())
-				print(queue)
-			print('*'*20)
+			if groupName not in self.mainTableNames:
+				request  = f"SELECT * FROM {self.name} WHERE {'AND '.join(requests)} "
+				sqlValue = DB_ORIGINAL.execute(request)
+				result   = sqlValue.fetchall()
+				if len(result) > 1: result = [result[-1]]
+				if not result:
+					print(groupName)
+					print(result)
+					print(queue)
+					print('-'*20)
 			self.data.append(tuple(queue))
-		print("="*20)
 		self.elements = len(self.data)
 	def xml(self, tag = "Row", short = True):
 		result = ""
