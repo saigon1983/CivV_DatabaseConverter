@@ -16,6 +16,10 @@ class Civ5Value:
 		self.unique 	= attributes['Unique']
 
 		if self.value == None and self.default != None: self.value = self.default
+
+		if self.type == 'BOOLEAN':
+			if self.value == 'true':  self.value = 1
+			if self.value == 'false': self.value = 0
 	def __str__(self):
 		return f'{self.name}: {self.value} ({self.type}, {self.notDefault()})'
 	def __repr__(self):
@@ -24,36 +28,101 @@ class Civ5Value:
 		return not (self.value == self.default)
 	def xml(self):
 		return placeLine(self.name, self.value, 0, False)
+class CivValue:
+	def __init__(self, owner, table, title, value, attrs, basic):
+		self.table = table
+		self.owner = owner
+		self.title = title
+		self.value = value
+		assert attrs != None, f'Список атрибутов, переданный для значения {self.title} пуст!'
+		self.type 		= attrs['DataType']
+		self.default 	= attrs['DefaultValue']
+		self.reference 	= attrs['References']
+		self.autoinc 	= attrs['AutoIncrement']
+		self.notnull 	= attrs['NotNull']
+		self.unique 	= attrs['Unique']
 
+		self.basic = basic
+
+		if self.value == None and self.title == 'ID':   self.value = self.basic
+		if self.value == None and self.default != None: self.value = self.default
+
+		if self.type == 'BOOLEAN':
+			if self.value == 'true':  self.value = 1
+			if self.value == 'false': self.value = 0
+	def likeDefault(self):
+		return self.value == self.default
+	def likeOriginal(self):
+		if self.value == 'NULL' and self.basic == None: return True
+		return self.value == self.basic
+	def xml(self):
+		title = self.title
+		value = self.value
+		if self.type == 'BOOLEAN':
+			if value == 1: value = 'true'
+			if value == 0: value = 'false'
+		return placeLine(title, value, 0, False)
+
+	def __str__(self):
+		result = f"<{self.owner}> ({self.table}): {self.title} = {self.value} ({self.type}). Default: {self.default}. Original: {self.basic})"
+		return result
+	def __repr__(self):
+		return f"{self.title} = {self.value}"
 class Civ5ValuesGroup:
 	mainTableNames = ('BuildingClasses', 'Buildings', 'Civilizations', 'Eras', 'Features', 'FakeFeatures', 'Improvements',
 					  'Leaders', 'Policies', 'PolicyBranchTypes', 'Resources', 'Technologies', 'UnitClasses', 'Units')
+	mainTypes = {'BuildingClasses': 	'BuildingClassType',
+				 'Buildings': 			'BuildingType',
+				 'Civilizations': 		'CivilizationType',
+				 'Eras': 				'EraType',
+				 'Features': 			'FeatureType',
+				 'FakeFeatures': 		'FeatureType',
+				 'Improvements': 		'ImprovementType',
+				 'Leaders': 			'LeaderType',
+				 'Policies': 			'PolicyType',
+				 'PolicyBranchTypes': 	'PolicyBranchType',
+				 'Resources': 			'ResourceType',
+				 'Technologies': 		'TechType',
+				 'UnitClasses': 		'UnitClassType',
+				 'Units': 				'UnitType'}
+
 	def __init__(self, groupName, someData, defaults):
-		self.name = groupName
-		self.data = []
-
+		self.groupName = groupName
+		self.mainGroup = True if self.groupName in self.mainTypes.keys() else False
+		self.groupData = []
 		for data in someData:
-			queue    = []
-			requests = []
-
-			for name, value in data.items():
-				sqlName  = name
-				sqlValue = value
-				if name == 'Unique': sqlName = f"'{name}'"
-				requests.append(f"{sqlName} = '{sqlValue}' ")
-				queue.append(Civ5Value(name, value, defaults[name]))
-			if groupName not in self.mainTableNames:
-				request  = f"SELECT * FROM {self.name} WHERE {'AND '.join(requests)} "
-				sqlValue = DB_ORIGINAL.execute(request)
-				result   = sqlValue.fetchall()
-				if len(result) > 1: result = [result[-1]]
-				if not result:
-					print(groupName)
-					print(result)
-					print(queue)
-					print('-'*20)
-			self.data.append(tuple(queue))
-		self.elements = len(self.data)
+			subGroup   = []
+			if self.mainGroup:
+				valueOwner = data['Type']
+				for name, value in data.items():
+					elementTitle 	= name
+					currentValue 	= value
+					defaultData		= defaults[name]
+					originalValue 	= db_get_value_from_cell(self.groupName, name, 'Type', valueOwner)
+					newValue = CivValue(valueOwner, self.groupName, elementTitle, currentValue, defaultData, originalValue)
+					subGroup.append(newValue)
+			else:
+				valueOwner = None
+				valueTitle = None
+				pairs 	   = {}
+				for name, value in data.items():
+					if name in self.mainTypes.values():
+						if not valueOwner:
+							valueTitle = name
+							valueOwner = data[name]
+							pairs[valueTitle] = valueOwner
+					else: pairs[name] = value
+				origins    = db_get_values_from_row(self.groupName, pairs)
+				for index, values in enumerate(data.items()):
+					if index > 0:
+						elementTitle  = values[0]
+						currentValue  = values[1]
+						defaultData	  = defaults[elementTitle]
+						originalValue = origins[index] if origins else None
+						newValue = CivValue(valueOwner, self.groupName, elementTitle, currentValue, defaultData, originalValue)
+						subGroup.append(newValue)
+			self.groupData.append(tuple(subGroup))
+		self.elements = len(self.groupData)
 	def xml(self, tag = "Row", short = True):
 		result = ""
 		for queue in self.data:

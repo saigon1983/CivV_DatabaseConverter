@@ -1,4 +1,5 @@
 import sqlite3
+from Main_Module.constants import *
 
 def get_row_names(tablename, database='Original/Database/Civ5DebugDatabase.db'):
     # Возвращает список наименований столбцов таблицы
@@ -37,3 +38,18 @@ def get_column_default(tablename, columnname, database='Original/Database/Civ5De
     if get_column_valuetype(tablename, columnname, database) == 'boolean':
         default = 'false' if default == 0 else 'true'
     return default
+
+def db_get_value_from_cell(table, column, termName, termValue):
+    name = column if column != 'Unique' else f'"{column}"'
+    request = f"SELECT {name} FROM {table} WHERE {termName} = '{termValue}'"
+    result = DB_ORIGINAL.execute(request).fetchone()[0]
+    return result
+
+def db_get_values_from_row(table, pairs):
+    array = []
+    for title, value in pairs.items():
+        array.append(f"{title} = '{value}'")
+    request = f"SELECT * FROM {table} WHERE {' AND '.join(array)} "
+    result = DB_ORIGINAL.execute(request).fetchall()
+    if len(result) > 1: result = [result[-1]]
+    return tuple(result[0]) if result else ()
