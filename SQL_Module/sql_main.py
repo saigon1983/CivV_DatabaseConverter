@@ -53,3 +53,11 @@ def db_get_values_from_row(table, pairs):
     result = DB_ORIGINAL.execute(request).fetchall()
     if len(result) > 1: result = [result[-1]]
     return tuple(result[0]) if result else ()
+def db_get_pair_of_values_from_row(table, pairs, column):
+    array = []
+    for title, value in pairs.items():
+        array.append(f"{title} = '{value}'")
+    request = f"SELECT {column} FROM {table} WHERE {' AND '.join(array)} "
+    result = DB_ORIGINAL.execute(request).fetchall()
+    if len(result) > 1: result = [result[-1]]
+    return {column: tuple(result[0])[0] if result else None}

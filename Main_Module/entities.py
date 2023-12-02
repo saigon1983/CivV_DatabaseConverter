@@ -2,34 +2,8 @@ from SQL_Module.sql_main import *
 from Main_Module.constants import *
 from XML_Module.xml_main import *
 import re
-
-class Civ5Value:
-	def __init__(self, name, value, attributes):
-		self.name  		= name
-		self.value 		= value
-		assert attributes != None, f'Список атрибутов, переданный для значения {self.name} пуст!'
-		self.type 		= attributes['DataType']
-		self.default 	= attributes['DefaultValue']
-		self.reference 	= attributes['References']
-		self.autoinc 	= attributes['AutoIncrement']
-		self.notnull 	= attributes['NotNull']
-		self.unique 	= attributes['Unique']
-
-		if self.value == None and self.default != None: self.value = self.default
-
-		if self.type == 'BOOLEAN':
-			if self.value == 'true':  self.value = 1
-			if self.value == 'false': self.value = 0
-	def __str__(self):
-		return f'{self.name}: {self.value} ({self.type}, {self.notDefault()})'
-	def __repr__(self):
-		return f'{self.name}: {self.value} ({self.type}, {self.notDefault()})'
-	def notDefault(self):
-		return not (self.value == self.default)
-	def xml(self):
-		return placeLine(self.name, self.value, 0, False)
-class CivValue:
-	def __init__(self, owner, table, title, value, attrs, basic):
+class Civ5MajorValue:
+	def __init__(self, owner, table, title, value, basic, attrs):
 		self.table = table
 		self.owner = owner
 		self.title = title
@@ -51,6 +25,9 @@ class CivValue:
 			if self.value == 'true':  self.value = 1
 			if self.value == 'false': self.value = 0
 	def likeDefault(self):
+		if self.value == 'NULL' and self.default == None: 	return True
+		if self.value == 1 and self.default == 'true': 		return True
+		if self.value == 0 and self.default == 'false': 	return True
 		return self.value == self.default
 	def likeOriginal(self):
 		if self.value == 'NULL' and self.basic == None: return True
@@ -62,12 +39,82 @@ class CivValue:
 			if value == 1: value = 'true'
 			if value == 0: value = 'false'
 		return placeLine(title, value, 0, False)
-
 	def __str__(self):
 		result = f"<{self.owner}> ({self.table}): {self.title} = {self.value} ({self.type}). Default: {self.default}. Original: {self.basic})"
 		return result
 	def __repr__(self):
 		return f"{self.title} = {self.value}"
+class Civ5MinorValue:
+	def __init__(self, owner, table, array, basic, attrs):
+		self.table = table
+		self.owner = owner
+		self.title = None
+		self.value = {}
+		assert attrs != None, f'Список атрибутов, переданный для {self.owner} ({self.table}) пуст!'
+		for title, value in array.items():
+			if value == self.owner:
+				self.title = title if not self.title else self.title
+			else:
+				self.value.update({title: {}})
+				self.value[title]['Value'] 		= value
+				self.value[title]['Original'] 	= basic[title]
+				self.value[title].update(attrs[title])
+				if self.value[title]['DataType'] == 'BOOLEAN':
+					if self.value[title]['Value'] == 'true':  self.value[title]['Value'] = 1
+					if self.value[title]['Value'] == 'false': self.value[title]['Value'] = 0
+	def likeOriginal(self):
+		for value in self.value.values():
+			if value['Value'] != value['Original']:
+				return False
+		return True
+	def xml(self):
+		result = {self.title: self.owner, }
+		for title, value in self.value.items(): result[title] = value['Value']
+		return makeBody(result)
+	def __str__(self):
+		string = ""
+		for title, value in self.value.items(): string += f"{title} = {value['Value']}; "
+		return f"<{self.owner}> ({self.table}): {string.strip()}"
+	def __repr__(self):
+		string = ""
+		for title, value in self.value.items(): string += f"{title} = {value['Value']}; "
+		return f"({string.strip()})"
+class Civ5MajorData:
+	def __init__(self, groupName, someData, defaults):
+		self.main 		= True
+		self.owner		= someData[0]['Type']
+		self.groupName 	= groupName
+		self.groupData 	= []
+
+		for name, value in someData[0].items():
+			elementTitle 	= name
+			elementValue 	= value
+			defaultData		= defaults[name]
+			originalValue 	= db_get_value_from_cell(self.groupName, name, 'Type', self.owner)
+			newValue = Civ5MajorValue(self.owner, self.groupName, elementTitle, elementValue, originalValue, defaultData)
+			self.groupData.append(newValue)
+		self.elements = len(self.groupData)
+	def __repr__(self):
+		return f"Civ5MajorData: <{self.owner} ({self.groupName}, {self.elements} attrs)>"
+class Civ5MinorData:
+	def __init__(self, groupName, someData, defaults):
+		self.main 		= False
+		self.owner		= tuple(someData[0].values())[0]
+		self.ownerType	= tuple(someData[0].keys())[0]
+		self.groupName 	= groupName
+		self.groupData 	= []
+		for data in someData:
+			originalData	= {}
+			defaultData 	= {}
+			for d in data.keys():
+				originalData.update(db_get_pair_of_values_from_row(self.groupName, data, d))
+				defaultData[d] = defaults[d]
+			newValue = Civ5MinorValue(self.owner, self.groupName, data, originalData, defaultData)
+			self.groupData.append(newValue)
+
+		print(self)
+	def __repr__(self):
+		return f"Civ5MinorData: <{self.owner} ({self.groupName}: {self.groupData})>"
 class Civ5ValuesGroup:
 	mainTableNames = ('BuildingClasses', 'Buildings', 'Civilizations', 'Eras', 'Features', 'FakeFeatures', 'Improvements',
 					  'Leaders', 'Policies', 'PolicyBranchTypes', 'Resources', 'Technologies', 'UnitClasses', 'Units')
@@ -86,43 +133,6 @@ class Civ5ValuesGroup:
 				 'UnitClasses': 		'UnitClassType',
 				 'Units': 				'UnitType'}
 
-	def __init__(self, groupName, someData, defaults):
-		self.groupName = groupName
-		self.mainGroup = True if self.groupName in self.mainTypes.keys() else False
-		self.groupData = []
-		for data in someData:
-			subGroup   = []
-			if self.mainGroup:
-				valueOwner = data['Type']
-				for name, value in data.items():
-					elementTitle 	= name
-					currentValue 	= value
-					defaultData		= defaults[name]
-					originalValue 	= db_get_value_from_cell(self.groupName, name, 'Type', valueOwner)
-					newValue = CivValue(valueOwner, self.groupName, elementTitle, currentValue, defaultData, originalValue)
-					subGroup.append(newValue)
-			else:
-				valueOwner = None
-				valueTitle = None
-				pairs 	   = {}
-				for name, value in data.items():
-					if name in self.mainTypes.values():
-						if not valueOwner:
-							valueTitle = name
-							valueOwner = data[name]
-							pairs[valueTitle] = valueOwner
-					else: pairs[name] = value
-				origins    = db_get_values_from_row(self.groupName, pairs)
-				for index, values in enumerate(data.items()):
-					if index > 0:
-						elementTitle  = values[0]
-						currentValue  = values[1]
-						defaultData	  = defaults[elementTitle]
-						originalValue = origins[index] if origins else None
-						newValue = CivValue(valueOwner, self.groupName, elementTitle, currentValue, defaultData, originalValue)
-						subGroup.append(newValue)
-			self.groupData.append(tuple(subGroup))
-		self.elements = len(self.groupData)
 	def xml(self, tag = "Row", short = True):
 		result = ""
 		for queue in self.data:
@@ -274,10 +284,16 @@ class Civ5Entity:
 	def __init__(self, thisName, someData):
 		self.name = thisName
 		self.data = []
+		self.major = []
+		self.minor = []
 		for tablename, data in someData.items():
 			defaults = self.TableProperties[tablename]
-			newGroup = Civ5ValuesGroup(tablename, data, defaults)
-			self.data.append(newGroup)
+			if tablename in self.SecondaryTablePrefixes.keys():
+				newGroup = Civ5MajorData(tablename, data, defaults)
+			else:
+				if data: newGroup = Civ5MinorData(tablename, data, defaults)
+			#newGroup = Civ5ValuesGroup(tablename, data, defaults)
+			#self.data.append(newGroup)
 		self.real = True if self.name in self.OriginalEntities else False
 
 	def xml(self):
