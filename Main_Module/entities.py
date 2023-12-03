@@ -80,9 +80,9 @@ class Civ5MinorValue:
 		for title, value in self.value.items(): string += f"{title} = {value['Value']}; "
 		return f"({string.strip()})"
 class Civ5MajorData:
-	def __init__(self, groupName, someData, defaults):
+	def __init__(self, groupName, owner, someData, defaults):
 		self.main 		= True
-		self.owner		= someData[0]['Type']
+		self.owner		= owner
 		self.groupName 	= groupName
 		self.groupData 	= []
 
@@ -97,13 +97,19 @@ class Civ5MajorData:
 	def __repr__(self):
 		return f"Civ5MajorData: <{self.owner} ({self.groupName}, {self.elements} attrs)>"
 class Civ5MinorData:
-	def __init__(self, groupName, someData, defaults):
+	def __init__(self, groupName, owner, ownerType, someData, defaults, columnNames):
 		self.main 		= False
-		self.owner		= tuple(someData[0].values())[0]
-		self.ownerType	= tuple(someData[0].keys())[0]
+		self.owner		= owner
+		self.ownerType	= ownerType
 		self.groupName 	= groupName
 		self.groupData 	= []
+		originalline = db_get_values_from_row(self.groupName, {self.ownerType: self.owner})
+
+		template = {self.ownerType: self.owner,}
+		for name in columnNames[1:]: template[name] = None
+
 		for data in someData:
+			template 		= data
 			originalData	= {}
 			defaultData 	= {}
 			for d in data.keys():
@@ -111,8 +117,8 @@ class Civ5MinorData:
 				defaultData[d] = defaults[d]
 			newValue = Civ5MinorValue(self.owner, self.groupName, data, originalData, defaultData)
 			self.groupData.append(newValue)
-
-		print(self)
+			print(data.keys())
+		print("="*30)
 	def __repr__(self):
 		return f"Civ5MinorData: <{self.owner} ({self.groupName}: {self.groupData})>"
 class Civ5ValuesGroup:
@@ -289,9 +295,11 @@ class Civ5Entity:
 		for tablename, data in someData.items():
 			defaults = self.TableProperties[tablename]
 			if tablename in self.SecondaryTablePrefixes.keys():
-				newGroup = Civ5MajorData(tablename, data, defaults)
+				newGroup = Civ5MajorData(tablename, self.name, data, defaults)
 			else:
-				if data: newGroup = Civ5MinorData(tablename, data, defaults)
+				columnNames = tuple(self.TableProperties[tablename].keys())
+				ownerType 	= columnNames[0]
+				newGroup 	= Civ5MinorData(tablename, self.name, ownerType, data, defaults, columnNames)
 			#newGroup = Civ5ValuesGroup(tablename, data, defaults)
 			#self.data.append(newGroup)
 		self.real = True if self.name in self.OriginalEntities else False
